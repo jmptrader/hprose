@@ -1,0 +1,828 @@
+=设计目标=
+
+Hprose 是作为一个轻量级、自描述、半文本、格式紧凑、动态类型、语言无关、平台无关的协议而设计的。
+
+Hprose 协议具有以下设计目标：
+
+* 它必须是自描述的，无需接口描述语言或外部描述定义。
+* 除了本来的二进制数据以外，它必须具有可读性，哪怕读起来稍微有些困难。
+* 它必须尽可能的格式紧凑。
+* 它必须尽可能的快。
+* 它必须是语言无关（跨语言）的。
+* 它必须是平台无关（跨平台）的。
+* 它必须支持递归类型数据。
+* 它必须支持 Unicode 字符串。
+* 它必须在无需转义和无需使用附件方式的情况下支持 8 位二进制数据。
+
+=序列化格式=
+
+Hprose 序列化拥有 7 种值类型：
+
+# [[#Integer|Integer]] (32位有符号整型数)
+# [[#Long|Long]] (无限精度长整型数)
+# [[#Double|Double]] (float, double or decimal)
+# [[#Boolean|Boolean]]
+# [[#UTF8_char|UTF8 char]] (16位 Unicode 字符, UTF-8 格式, 1-3 个字节)
+# [[#Null|Null]]
+# [[#Empty|Empty]] (空的字符串, 空的二进制数据)
+
+4 种简单引用类型：
+
+# [[#DateTime|DateTime]]
+# [[#Bytes|Bytes]]
+# [[#String|String]]
+# [[#GUID|GUID]]
+
+和 3 种可递归引用类型：
+
+# [[#List|List]]
+# [[#Map|Map]]
+# [[#Object|Object]]
+
+每种类型以一个标记或者多个标记与数据混合表示。每个标记占一个字节（8 位）。
+
+标记是区分大小写的。序列化数据是空白敏感的。
+
+==Integer==
+
+如果整数 <code>n</code> 满足 0 &le; n &le; 9，那么序列化数据被表示为一个字节，数值为：0x30 + n。
+
+其它整数被表示为如下格式：
+
+<pre>
+i<n>;
+</pre>
+
+标记 <code>i</code> 表示整数的开始，标记 <code>;</code> 表示整数的结束。
+
+<code><n></code> 是数字 n 的字符串表示。
+
+例如：
+
+<pre>
+0                        # 整数 0
+8                        # 整数 8
+i1234567;                # 整数 1234567
+i-128;                   # 整数 -128
+</pre>
+
+==Long==
+
+长整型数 <code>n</code> 表示为如下格式：
+
+<pre>
+l<n>;
+</pre>
+
+标记 <code>l</code> 表示长整型数的开始，标记 <code>;</code> 表示长整型数的结束。
+
+<code><n></code> 是数字 n 的字符串表示。
+
+例如：
+
+<pre>
+l1234567890987654321;    # 长整型数 1234567890987654321
+l-987654321234567890;    # 长整型数 -987654321234567890
+</pre>
+
+==Double==
+
+浮点数具有三个特殊值：非数字（NaN），正无穷大和负无穷大。
+
+非数字（NaN）被表示为一个字节：<code>'N'</code>。
+
+正无穷大被表示为两个字节：<code>'I+'</code>。
+
+负无穷大被表示为两个字节：<code>'I-'</code>。
+
+其它浮点数 <code>n</code> 被表示为以下格式：
+
+<pre>
+d<n>;
+</pre>
+
+标记 <code>d</code> 表示浮点数的开始，标记 <code>;</code> 表示浮点数的结束。
+
+<code><n></code> 是数字 n 的字符串表示。
+
+例如：
+
+<pre>
+N                        # 非数字（NaN）
+I+                       # 正无穷大（Infinity）
+I-                       # 负无穷大（-Infinity）
+d3.1415926535898;        # 浮点数 3.1415926535898
+d-0.1;                   # 浮点数 -0.1
+d-1.45E23;               # 浮点数 -1.45E23
+d3.76e-54;               # 浮点数 3.76e-54
+</pre>
+
+指数符号 <code>e</code> 是不区分大小写的。
+
+==Boolean==
+
+单个字节 <code>'t'</code> 表示真值（true），单个字节 <code>'f'</code> 表示假值（false）。
+
+<pre>
+t                        # true
+f                        # false
+</pre>
+
+==UTF8 char==
+
+大部分语言拥有一个 Unicode 字符类型。比如 Java 和 C#。UTF8 char 用于存储此种类型。所以你无法存储所有的 Unicode 代码点（codepoint）。如果一个 Unicode 代码点（codepoint）需要两个字符来存储。它将被序列化为一个 [[#String|String]]。
+
+字符 <code>c</code> 表示为如下形式：
+<pre>
+u<c>
+</pre>
+
+标记 <code>u</code> 表示 UTF8 char 的开始。没有结束标记，因为 UTF8 char 是自描述的。
+
+<code><c></code> 是 utf8 编码的字符。例如：
+
+<pre>
+uA                       # 'A' 被存储为 1 个字节 0x41
+u½                       # '½' 被存储为 2 个字节 0xC2 0xBD
+u∞                       # '∞' 被存储为 3 个字节 0xE2 0x88 0x9E
+</pre>
+
+==Null==
+
+Null 表示一个 null 指针或 null 对象。单字节 <code>'n'</code> 表示 null 值。
+
+<pre>
+n                        # null
+</pre>
+
+==Empty==
+
+Empty 表示一个空的字符串或空的二进制数据。单字节 <code>'e'</code> 表示 empty 值。
+
+<pre>
+e                        # empty
+</pre>
+
+==DateTime==
+
+DateTime 在 hprose 是引用类型，尽管在某些语言中它可能是一个值类型。这并不会带来任何问题。我们将会在后面[[#引用|引用]] 一节来讨论值类型和引用类型的区别。
+
+DateTime 可以表示本地或 UTC 时间。本地时间以标记 <code>;</code> 作为结尾，UTC 时间以标记 <code>Z</code> 作为结尾。
+
+DateTime 数据可以包含年，月，日，时，分，秒，毫秒，微秒，纳秒，但并不需要全部都包含。他可以只包含年、月、日来表示日期，或者只包含时、分、秒来表示时间。
+
+标记 <code>D</code> 表示日期的开始，标记 <code>T</code> 表示时间的开始。
+
+例如：
+
+<pre>
+D20121229;                    # 本地日期 2012-12-29
+D20121225Z                    # UTC 日期 2012-12-25
+T032159;                      # 本地时间 03:21:59
+T182343.654Z                  # UTC 时间 18:23:43.654
+D20121221T151435Z             # UTC 日期时间 2012-12-21 15:14:35
+D20501228T134359.324543123;   # 本地日期时间 2050-12-28 13:43:59.324543123
+</pre>
+
+==Bytes==
+
+Bytes 类型表示二进制数据。它相当于编程语言中的 byte[] 或数据流对象。
+
+Bytes 的最大长度为 2147483647。
+
+二进制数据 <code>bytes</code> (假设它的长度为 <code>len</code>) 表示为如下形式：
+
+<pre>
+b<len>"<bytes>"
+</pre>
+
+标记 <code>b</code> 表示二进制数据的开始。如果 <code><len></code> 为 0，<code><len></code> 可以被省略。<code><bytes></code> 是原始的二进制数据。标记 <code>"</code> 用来表示二进制数据的开始和结束。
+
+例如：
+
+<pre>
+b""                           # 空的二进制数据
+b10"!@#$%^&*()"               # byte[10] { '!', '@', '#', '$', '%', '^', '&', '*', '(', ')' }
+</pre>
+
+==String==
+
+String 类型表示 Unicode 字符组成的字符串或者字符数组，或者 UTF8 编码的字符串或字符数组。
+
+字符串的最大长度为 2147483647。该长度既非字节数，也非 Unicode 代码点个数。它表示的是 16 位的 Unicode（UTF-16 编码）的字符个数。
+
+字符串 <code>str</code> (假设它的长度为 <code>len</code>) 表示为如下形式：
+
+<pre>
+s<len>"<str>"
+</pre>
+
+标记 <code>s</code> 表示字符串的开始。如果 <code><len></code> 为 0, <code><len></code> 可以被忽略。<code><str></code> 是 UTF-8 编码的字符串。标记 <code>"</code> 表示字符串的开始与结束。
+
+例如：
+
+<pre>
+s""                           # 空的字符串
+s12"Hello world!"             # 字符串 'Hello world!'
+s2"你好"                      # 字符串 '你好'
+</pre>
+
+==GUID==
+
+GUID 是“全局唯一标识符”（Globally Unique Identifier）的缩写。它相当于编程语言中的 GUID 或 UUID 类型。
+
+GUID 是一个 128 位的值。它表示为如下形式：
+
+<pre>
+g{<GUID>}
+</pre>
+
+标记 <code>g</code> 表示 GUID 的开始。标记 <code>{</code><code>}</code> 用来表示 GUID 数据的开始和结束。<code><GUID></code> 是一个格式化为 32 个十六进制数字并通过连字符（-）按组分隔的字符串，比如：AFA7F4B1-A64D-46FA-886F-ED7FBCE569B6。
+
+例如：
+
+<pre>
+g{AFA7F4B1-A64D-46FA-886F-ED7FBCE569B6}              # GUID 'AFA7F4B1-A64D-46FA-886F-ED7FBCE569B6'
+</pre>
+
+GUID 字符串是不区分大小写的。
+
+==List==
+
+List 是一个可递归引用类型。它相当于编程语言中的数组（array），列表（list），集合（set）或容器（collection）类型。
+
+它可以包含 0 个或多个元素。元素可以为 hprose 中任意有效的类型。
+
+List 元素的最大数目为 2147483647。
+
+具有 <code>n</code> 个元素的 List 被表示为如下形式：
+
+<pre>
+a<n>{<元素_1><元素_2><元素_3>...<元素_n>}
+</pre>
+
+标记 <code>a</code> 表示 List 的开始。如果 <code><n></code> 为 0，<code><n></code> 可以被省略。标记 <code>{</code><code>}</code> 被用来表示 List 数据的开始和结束。<code><元素_i></code> 是每个元素序列化后的数据。元素之间没有其它任何分隔符，因为序列化数据是自描述的。
+
+例如：
+
+<pre>
+a{}                                                       # 0 个元素的数组
+a10{0123456789}                                           # int[10] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+a7{s3"Mon"s3"Tue"s3"Wed"s3"Thu"s3"Fri"s3"Sat"s3"Sun"}     # string[7] {'Mon, 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
+a3{a3{123}a3{456}a3{789}}                                 # int[][] { {1, 2, 3}, {4, 5, 6}, {7, 8, 9} }
+</pre>
+
+==Map==
+
+Map 是另一种可递归引用类型。它相当于编程语言中的表（map），哈希表（hashtable），字典（dictionary）或动态对象类型。
+
+它可以包含 0 个或多个键值对。键（key）或值（value）可以为 hprose 中任意有效的类型。
+
+Map 中键值对的最大数目为 2147483647。
+
+包含有 <code>n</code> 个键值对的 Map 表示为如下形式：
+
+<pre>
+m<n>{<key_1><value_1><key_2><value_2>...<key_n><value_n>}
+</pre>
+
+标记 <code>m</code> 表示 Map 的开始。如果 <code><n></code> 为 0，<code><n></code> 可以被省略。标记 <code>{</code><code>}</code> 被用来表示 Map 数据的开始和结束。<code><key_i></code> 是每个键（key）序列化后的数据。<code><value_i></code> 是每个值（value）序列化后的数据。键（key）、值（value）和键值对之间没有其它任何分隔符，因为序列化数据是自描述的。
+
+例如：
+
+<pre>
+m{}                                                       # 0 个键值对的 Map
+m2{s4"name"s5"Tommy"s3"age"i24;}                          # {
+                                                          #     "name": "Tommy",
+                                                          #     "age" : 24
+                                                          # }
+</pre>
+
+==Object==
+
+Object 与 Map 类似，但是 Object 的键必须为字符串，并且 Object 具有一个固定的结构。在这里，我们将这个固定的结构称为类（Class）。这里的类（Class）相当于编程语言中的结构体（struct），类（class），或对象原型（object prototype）。
+
+Object 的序列化格式比 Map 要复杂的多。它被分为两个部分：
+
+# 类（Class）的序列化
+# 对象实例（Object instance）的序列化
+
+类（Class）的序列化包括类型名称，字段/属性个数，字段/属性名称。类（Class）的序列化只进行一次。后面的对象只需要序列化它们的数据值。
+
+每个类拥有一个整数引用编号，它将被对象实例的序列化所引用。
+
+类的整数引用编号从 0 开始。它表示：如果有许多不同的对象属于不同的类，那么当序列化类时，第一个序列化的类编号为 0，第二个序列化的类的编号为 1，以此类推。
+
+类的序列化格式如下：
+
+<pre>
+c<类型名称长度>"<类型名称的字符串>"<字段数目>{<字段 1 的名称><字段 2 的名称>...<字段 n 的名称>}
+</pre>
+
+对象实例序列化的格式如下：
+
+<pre>
+o<类的整数引用编号>{<字段 1 的值><字段 2 的值>...<字段 n 的值>}
+</pre>
+
+例如：
+
+<pre>
+class Person {
+    String name;
+    int age;
+}
+
+Person[] users = new Person[2];
+
+users[0] = new Person("Tommy", 24);
+users[1] = new Person("Jerry", 19);
+</pre>
+
+users 的序列化数据为：
+
+<pre>
+a2{c6"Person"2{s4"name"s3"age"}o0{s5"Tommy"i24;}o0{s5"Jerry"i19;}}
+</pre>
+
+==引用==
+
+我们知道 JSON 是一个轻量级的数据格式。但是 JSON 不能表示下面的数据：
+
+<pre>
+var list = [];
+list[0] = list;
+</pre>
+
+因为 JSON 不支持引用。但是 hprose 可以将其序列化为：
+
+<pre>
+a1{r0;}
+</pre>
+
+每个引用类型的数据拥有一个整数引用编号，但它与类的整数引用编号是相互独立的。
+
+引用类型数据的整数引用编号从 0 开始。当相同的数据被再次序列化时，它将被序列化为一个引用。
+
+但是请注意，引用本身不具有整数引用编号。
+
+引用数据表示为以下形式：
+
+<pre>
+r<整数引用编号>;
+</pre>
+
+标记 <code>r</code> 表示引用的开始。标记 <code>;</code> 表示引用的结束。
+
+例如：
+
+<pre>
+var list = [
+    {
+        "name": "Tommy",
+        "age" : 24 
+    },
+    {
+        "name": "Jerry",
+        "age" : 18 
+    }
+];
+</pre>
+
+list 的序列化数据为：
+
+<pre>
+a2{m2{s4"name"s5"Tommy"s3"age"i24;}m2{r2;s5"Jerry"r4;i18;}}
+</pre>
+
+再举一例：
+
+<pre>
+var a = [];
+var b = [];
+a[0] = a;
+a[1] = b;
+b[0] = a;
+b[1] = b;
+var c = [a,b];
+</pre>
+
+c 的序列化数据为：
+
+<pre>
+a2{a2{r1;a2{r1;r2;}}r2;}
+</pre>
+
+=RPC 协议=
+
+Hprose 远程过程调用（RPC）协议支持批量调用，引用参数传递，同步和异步通讯。
+
+Hprose 远程过程调用（RPC）协议非常简单。它由几段数据组成。每段数据包括至少一个字节的标记。下面是Hprose 远程过程调用（RPC）协议的标记列表：
+
+* 0x46('F'): 函数列表
+* 0x43('C'): RPC 调用
+* 0x52('R'): RPC 结果
+* 0x41('A'): RPC 参数
+* 0x45('E'): RPC 错误
+* 0x7A('z'): 结束
+
+==函数列表==
+
+远程过程调用（RPC）服务器可以发布一个或多个函数/方法。每个函数/方法拥有一个名字。函数/方法名以字符串的形式表示。函数列表是一个函数方法名的 List。
+
+如果客户端只发送一个结束标记 'z' 到服务器端，而没有其它数据。那么服务器端应该返回函数列表。
+
+Hprose 远程过程调用（RPC）协议是动态弱类型的。它支持动态类型参数，变长参数函数和方法。所以函数列表只是一个函数/方法名列表，而没有参数和结果的相关信息。
+
+例如，如果服务器端发布了两个函数，一个是 'hello'，另一个是 'MD5'，那么函数列表应该以如下形式返回：
+
+<pre>
+Fa2{s5"hello"s3"MD5"}z
+</pre>
+
+Hprose 远程过程调用（RPC）服务器支持发布缺失的函数/方法。这表示如果客户端调用一个服务器端不存在的函数/方法，它可以被一个统一的处理器所处理。如果服务器端设置有这样的一个统一的处理器。那么函数列表中需要有一个 '*' 项来表示它。
+
+例如：
+
+<pre>
+Fa1{s1"*"}z
+</pre>
+
+函数/方法名和缺失函数/方法统一处理器可以被一起发布。
+
+例如：
+
+<pre>
+Fa3{s1"*"s5"hello"s3"MD5"}z
+</pre>
+
+Hprose 客户端可以忽略该实现，但是服务器端必须实现它。
+
+==RPC 调用==
+
+RPC 调用由客户端发起，例如：
+
+<pre>
+Cs5"hello"a1{s5"world"}z            # result = client.hello("world");
+</pre>
+
+你可以传递 0 个或多个参数，例如：
+
+<pre>
+Cs3"sum"a3{012}z                    # result = client.sum(0, 1, 2);
+</pre>
+
+如果没有参数，参数列表可以省略，例如：
+
+<pre>
+Cs9"deleteAll"z                    # client.deleteAll();
+</pre>
+
+你可以进行引用参数传递，例如：
+
+<pre>
+Cs4"sort"a1{a10{2465318790}}tz     # void Sort(ref int[] a);  // defined in server
+                                   # int[] a = new int[] {2, 4, 6, 5, 3, 1, 8, 7, 9, 0};
+                                   # client.sort(ref a);
+</pre>
+
+hprose 发布的函数/方法名是不区分大小写的。例如上面的例子中，服务器端定义的函数/方法名是 "Sort"，但是在客户端，可以使用 'sort'，'Sort' 或 'SORT' 来调用它，这都没问题。
+
+在标记 'C' 之后，标记 's' 表示函数/方法名，标记 'a' 表示参数列表，标记 't' 表示引用参数传递。'''''不要'''''用标记 'f' 表示值参数传递，因为这是默认行为，服务器端不需要处理 'f' 标记。标记 'z' 表示调用结束。
+
+函数/方法名和参数列表是独立的对象序列化。因此它们具有独立的整数引用编号。
+
+Hprose 支持批量调用，例如：
+
+<pre>
+Cs5"hello"a1{s5"world"}Cs3"sum"a3{012}z            # client.beginBatch();
+                                                   # client.hello("world");
+                                                   # client.sum(0, 1, 2);
+                                                   # results = client.endBatch();
+</pre>
+
+批量调用是 hprose 客户端的可选特征，客户端可以不必实现的。
+
+==RPC 应答==
+
+RPC 应答由服务器端返回，例如：
+
+<pre>
+string hello(string str) {
+    return "Hello " + str + "!";
+}
+
+int sum(int a, int b, int c) {
+    return a + b + c;
+}
+</pre>
+
+<pre>
+Cs5"hello"a1{s5"world"}z            # 客户端调用
+
+Rs12"Hello world!"z                 # 服务器端应答
+
+Cs3"sum"a3{012}z                    # 客户端调用
+
+R3z                                 # 服务器端应答
+</pre>
+
+返回值可以是 hprose 支持的任意类型。
+
+如果发布的函数/方法不具有返回值，则返回值为 Null。
+
+如果是引用参数传递的话，在返回值后面将紧跟着返回参数列表，例如：
+
+<pre>
+void Sort(ref int[] a) {
+    Array.Sort(a);
+}
+</pre>
+
+<pre>
+Cs4"sort"a1{a10{2465318790}}tz      # 客户端调用
+
+RnAa1{a10{0123456789}}z             # 服务器端应答
+</pre>
+
+在标记 'R' 之后的是序列化的结果。在标记 'A' 之后的是序列化的参数列表。在应答的末尾是标记 'z'。
+
+函数/方法的结果和参数列表也是独立的对象序列化，所以它们也是具有各自独立的整数引用编号。
+
+在上面的例子中，服务器端函数的参数其实无需定义成 ref 参数。事实上，Array.Sort 可以直接发布。当然，这涉及到协议的实现，这里我们不过多的讨论它。
+
+对于批量调用的应答，这里有个例子：
+
+<pre>
+Cs5"hello"a1{s5"world"}Cs3"sum"a3{012}z            # 客户端批量调用
+
+Rs12"Hello world!"R3z                              # 服务器端应答
+</pre>
+
+==RPC 错误==
+
+如果在远程函数/方法执行过程中发生错误，hprose 服务器应该以如下格式返回错误信息：
+
+<pre>
+E<error_message>z
+</pre>
+
+<code><error_message></code> 是序列化的错误信息字符串。例如：
+
+<pre>
+void errorExample() {
+    throw new Exception("This is a error example.");
+}
+</pre>
+
+<pre>
+Cs12"errorExample"z               # 客户端调用
+
+Es24"This is a error example."z   # 服务器端应答
+</pre>
+
+如果在批处理调用中发生错误，批处理调用可以被中断。例如：
+
+<pre>
+Cs5"hello"a1{s5"world"}Cs12"errorExample"Cs3"sum"a3{012}z            # 客户端批处理调用
+
+Rs12"Hello world!"Es24"This is a error example."z                    # 服务器端应答
+</pre>
+
+也可以不被中断，例如：
+
+<pre>
+Cs5"hello"a1{s5"world"}Cs12"errorExample"Cs3"sum"a3{012}z            # 客户端批处理调用
+
+Rs12"Hello world!"Es24"This is a error example."R3z                  # 服务器端应答
+</pre>
+
+
+= 传输协议绑定 =
+
+Hprose 远程过程调用（RPC）通讯可以在任何底层网络协议上传输。例如 HTTP，TCP 或 UNIX socket。
+
+== HTTP 绑定 ==
+
+当 hprose 远程过程调用（RPC）工作于 HTTP 之上时，hprose 远程过程调用（RPC）的数据作为 POST 请求的 body 部分发送，以响应的 body 部分返回。
+
+Hprose 远程过程调用（RPC） 对 HTTP 的头部（head）没有任何特别的要求。
+
+== 半双工套接字（Socket）绑定 ==
+
+Hprose 远程过程调用（RPC）也可以工作于 TCP 或 UNIX 套接字（Socket）之上。Hprose 远程过程调用（RPC）数据的长度以 BigEndian 的编码方式以 4 个字节的包头发送。Hprose 的数据作为包体部分直接发送，无需另外编码。例如：
+
+<pre>
+<0x00,0x00,0x00,0x18>Cs5"hello"a1{s5"world"}z            # result = client.hello("world");
+</pre>
+
+<0x00,0x00,0x00,0x18> 表示 4 个字节的 BigEndian 编码的整数 24。
+
+应答格式同上类似。第一个字节的首位总是被设为 `0`，这意味着包体的最大长度为 2<sup>31</sup> - 1（2147483647）个字节。
+
+这个包头设计是为了可以更快更方便的处理套接字数据报中的数据。
+
+== 全双工套接字（Socket）绑定 ==
+
+半双工套接字绑定易于实现，但是对连接的利用率不够高。所以我们也支持全双工套接字绑定方式。Hprose 远程过程调用（RPC）数据的长度仍以 BigEndian 的编码方式以 4 个字节的包头发送，但是第一个字节首位总是被设为 `1`。该位并不是长度的符号位，因为长度总是正整数，它仅用于区别半双工还是全双工。接下来的 4 个字节表示请求的唯一标识（id）。这 8 个字节是包头。Hprose 的数据作为包体部分直接发送，无需另外编码。例如：
+
+<pre>
+<0x80,0x00,0x00,0x18><0x00,0x00,0x00,0x00>Cs5"hello"a1{s5"world"}z            # 客户端请求
+
+<0x80,0x00,0x00,0x13><0x00,0x00,0x00,0x00>Rs12"Hello world!"z                 # 服务器端应答
+
+<0x80,0x00,0x00,0x10><0x00,0x00,0x00,0x01>Cs3"sum"a3{012}z                    # 客户端请求
+
+<0x80,0x00,0x00,0x18><0x00,0x00,0x00,0x02>Cs5"hello"a1{s5"world"}z            # 客户端请求
+
+<0x80,0x00,0x00,0x13><0x00,0x00,0x00,0x02>Rs12"Hello world!"z                 # 服务器端应答
+
+<0x80,0x00,0x00,0x03><0x00,0x00,0x00,0x01>R3z                                 # 服务器端应答
+</pre>
+
+<0x80,0x00,0x00,0x18> 表示 4 个字节的 BigEndian 编码的整数 24。
+
+<0x00,0x00,0x00,0x00>，<0x00,0x00,0x00,0x01>，<0x00,0x00,0x00,0x02> 是请求的唯一标识（id）。客户端使用它来处理请求和响应之间的对应关系。
+
+== WebSocket 绑定 ==
+
+Hprose 远程过程调用（RPC）也可以工作于 WebSocket 之上。 Hprose 远程过程调用（RPC）的数据以二进制数据的方式在 WebSocket 上发送和接收。
+
+Hprose 远程过程调用（RPC）添加了 4 个字节的头作为请求唯一标识（id），服务器端不需要关心请求唯一标识（id）如何编码，只需要在应答中重复它就可以了。
+
+例如：
+
+<pre>
+<0x00,0x00,0x00,0x00>Cs5"hello"a1{s5"world"}z            # 客户端调用
+
+<0x00,0x00,0x00,0x00>Rs12"Hello world!"z                 # 服务器端应答
+
+<0x00,0x00,0x00,0x01>Cs3"sum"a3{012}z                    # 客户端调用
+
+<0x00,0x00,0x00,0x02>Cs5"hello"a1{s5"world"}z            # 客户端调用
+
+<0x00,0x00,0x00,0x02>Rs12"Hello world!"z                 # 服务器端应答
+
+<0x00,0x00,0x00,0x01>R3z                                 # 服务器端应答
+</pre>
+
+<0x00,0x00,0x00,0x00>, <0x00,0x00,0x00,0x01> 和  <0x00,0x00,0x00,0x02> 是请求唯一标识（id）。客户端使用它来处理请求和响应之间的对应关系。
+
+再无其它特殊要求。
+
+=形式化定义=
+
+[http://tools.ietf.org/html/rfc4234 ABNF]:
+<pre>
+
+serialize-data = integer / long / double / nan / positive-infinity / negative-infinity /
+                 true / false / null / empty / utf8-char / bytes / string / datetime / guid /
+                 list / map / object / ref
+
+UINT = "0" / %x31-39 *DIGIT
+
+SINT = *("+" / "-") UINT
+
+integer = DIGIT / %x69 SINT ";"
+
+long = %x6C SINT ";"
+
+double = %x64 SINT ["." 1*DIGIT ["E" SINT]] ";"
+
+nan = %x4E
+
+positive-infinity = %x49 "+"
+
+negative-infinity = %x49 "-"
+
+true = %x74
+
+false = %x66
+
+null = %x6E
+
+empty = %x65
+
+one-byte-utf8 = %x00-7F
+
+two-byte-utf8 = %xC0-DF %x80-BF
+
+three-byte-utf8 = %xE0-EF %x80-BF %x80-BF
+
+four-byte-utf8 = %xF0-F7 %x80-BF %x80-BF %x80-BF
+
+utf8 = one-byte-utf8 / two-byte-utf8 / three-byte-utf8 / four-byte-utf8
+
+utf8-char = %x75 (one-byte-utf8 / two-byte-utf8 / three-byte-utf8)
+
+bytes-length = UINT
+
+bytes = %x62 DQUOTE DQUOTE / %x62 bytes-length DQUOTE <bytes-length>OCTET DQUOTE
+
+string-length = UINT
+
+string = %x73 DQUOTE DQUOTE / %x73 string-length DQUOTE <string-length>utf8 DQUOTE
+
+year = 4DIGIT
+
+month = "0" %x31-39 / "1" %x30-32
+
+day = "0" %x31-39 / %x31-32 %x30-39 / "3" %x30-31
+
+local = ";"
+
+utc = %x5A
+
+timezone = local / utc
+
+date = %x44 year month day timezone
+
+hour = %x30-31 DIGIT / "2" %x30-x33
+
+minute = %x30-35 DIGIT
+
+second = %x30-35 DIGIT
+
+millisecond = 3DIGIT
+
+microsecond = 6DIGIT
+
+nanosecond = 9DIGIT
+
+time = %x54 hour minute second ["." (millisecond / microsecond / nanosecond)] timezone
+
+datetime = date / time / %x44 year month day time
+
+guid = %x67 "{" 8HEXDIG "-" 4HEXDIG "-" 4HEXDIG "-" 4HEXDIG "-" 12HEXDIG "}"
+
+element = serialize-data
+
+list-count = UINT
+
+list = %x61 "{" "}" / %x61 list-count "{" <list-count>element "}"
+
+key = serialize-data
+
+value = serialize-data
+
+keyvalue = key value
+
+map-count = UINT
+
+map = %x6D "{" "}" / %x6D map-count "{" <map-count>keyvalue "}"
+
+classname-length = UINT
+
+classname = classname-length DQUOTE <classname-length>utf8 DQUOTE
+
+fieldname = string
+
+field-count = UINT
+
+class = %x63 classname field-count "{" <field-count>fieldname "}"
+
+class-ref = UINT
+
+fieldvalue = serialize-data
+
+object = [class] %x6F class-ref "{" <field-count>fieldvalue "}"
+
+ref = %x72 UINT ";"
+
+string-list = %x61 list-count "{" <list-count>string "}"
+
+end = %x7A
+
+function-list = %x46 string-list end
+
+function-name = string
+
+function-arguments = list
+
+passing-by-ref = true
+
+rpc-call = 1*(%x43 function-name [function-arguments [passing-by-ref]]) end
+
+rpc-result = %x52 serialize-data
+
+rpc-arguments = %x41 list
+
+rpc-error = %x45 string
+
+rpc-reply = rpc-error end / 1*(rpc-result [rpc-arguments]) [rpc-error] end
+
+</pre>
+
+=作者信息=
+
+ 	马秉尧 <mabingyao@gmail.com>
+
+=版权与许可=
+
+© Copyright 2008-2016 Hprose.com. All Rights Reserved.
+
+Any party may implement this protocol for any purpose under the terms of the MIT License, provided that the implementation conforms to this specification. 
+
+This document and translations of it may be copied and furnished to others, and derivative works that comment on or otherwise explain it or assist in its implementation may be prepared, copied, published and distributed, in whole or in part, without restriction of any kind, provided that the above copyright notice and these paragraphs are included on all such copies and derivative works.
+
+THIS DOCUMENT AND THE INFORMATION CONTAINED HEREIN IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTY THAT THE USE OF THE INFORMATION HEREIN WILL NOT INFRINGE ANY RIGHTS OR ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.

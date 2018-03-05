@@ -1,0 +1,137 @@
+= 常见问题解答 =
+
+== 非技术问题 ==
+
+=== 为什么叫 hprose？ ===
+
+hprose 是 High Performance Remote Object Service Engine 的首字母缩写，翻译成中文是高性能远程对象服务引擎。
+
+=== hprose 怎么发音？ ===
+
+我英语不好，我也不知道该怎么念才对，所以你想怎么念，你随便。我有时候会念 h-prose，有时候会念 h-p-rose，但我基本上不会念成 h-p-r-o-s-e，除了别人问我怎么拼写的时候。
+
+=== hprose 是免费的吗？ ===
+
+是的。hprose 免费，开源，MIT 授权。没有专利风险。
+
+=== 我可以在产品中使用 hprose 吗？ ===
+
+绝对没问题。它是一个被众多项目广泛使用过的久经考验的成熟的开发库。其本身拥有将近十年的开发史，而且作者很勤奋，不但每日都在更新该项目，而且提供实时的 QQ 问题解答。
+
+=== 那可以告诉我作者的 QQ 号码吗？ ===
+
+我可以告诉你一个比作者 QQ 更好的号码：48855729，这个是 Hprose 技术交流群的 QQ 群号，2000 人的大群，马上要满了，需要的赶紧加，作者们（注意 “们” 哦，不止一个作者）就在里面，加入群，你自然就知道作者们的 QQ 号码了。
+
+== 无语言差别的技术问题 ==
+
+=== hprose 采用什么方式序列化数据？ ===
+
+hprose 拥有自己的[https://github.com/hprose/hprose/blob/master/spec_zh_CN.mediawiki#-2 序列化格式]，这是一种紧凑的半文本的序列化格式。
+
+=== 为什么不使用 XML 序列化方式？ ===
+
+XML 太臃肿了，而且解析效率太低。
+
+=== 为什么不使用 JSON 序列化方式？ ===
+
+JSON 确实是一种不错的数据序列化方式，但是它可以表示的数据类型有限，不支持数据中包含自引用和互引用，序列化和反序列化复杂数据效率较低。虽然拥有众多的实现，但是不同的实现之间存在很多兼容性问题。
+
+=== 为什么不使用 protobuf 序列化方式？ ===
+
+protobuf(Protocol Buffer) 确实是一种比较高效的序列化方式。
+
+但是 protobuf 的序列化数据不是自描述的，所以，它不适合用于动态远程调用的实现。使用它，需要编写 proto 文件，然后生成客户端和服务器端的框架代码，这样一来，会导致客户端和服务器端紧密耦合，而这恰恰是 hprose 要解决的主要问题之一，所以 hprose 没有采用这种静态代码生成方式的序列化方式，所以这也是不使用类似的 thrift 之类的格式原因。
+
+况且 hprose 的序列化实现并不比这些慢，比如在 Java，.NET 等语言中，hprose 动态序列化的性能都远超 protobuf 静态序列化的性能。
+
+=== 为什么不使用 hessian 序列化方式？ ===
+
+hessian 序列化方式跟 hprose 类似，都属于动态序列化方式。
+
+不同点是 hessian 采用的是二进制序列化方式，而且 hessian 序列化方式仅仅对 Java 支持的比较好，对其它语言的支持就比较差了，所以跨语言能力有限。
+
+而且即使是对 Java 的支持也比 hprose 序列化要逊色，比如 hprose 对 Java 的泛型数据的序列化和反序列化就比 hessian 好很多。
+
+在性能上，hprose 序列化也要比 hessian 快一倍多（二进制序列化并不一定比文本序列化快，更何况 hprose 并不是严格意义上的文本序列化，而是半文本序列化）。
+
+在序列化之后的数据大小上，hprose 跟 hessian 不相上下，在序列化一些复杂数据时，hprose 比 hessian 序列化的数据还要小。
+
+在跨语言支持上，hprose 序列化更是比 hessian 序列化强得多。
+
+所以，完全没必要使用 hessian 序列化方式。
+
+=== 为什么不使用 msgpack 序列化方式？ ===
+
+msgpack 序列化方式跟 hessian 类似，也是动态序列化，也是二进制序列化，但是性能和跨语言能力比 hessian 要高的多。不过 msgpack（MessagePack）序列化方式出现较晚，hprose 开发时，还没有 msgpack 序列化方式。在 msgpack 成为一种成熟的序列化格式时，hprose 也已经被广泛使用了。
+
+msgpack 以性能见长，但是性能主要看实现，有些 msgpack 的实现在性能上虽然要高于 hprose，但是实现太过简单，也不完备，可用性较差，而较为完备的 msgpack 实现在性能上并不比 hprose 更好。
+
+hprose 的序列化格式在调试时，具有较好的可读性，而二进制格式的 msgpack 则完全不具有可读性，所以不利于接口调试。
+
+在数据类型的支持上，hprose 要比 msgpack 支持的类型丰富，对于复杂类型的序列化，hprose 比 msgpack 支持的更好。
+
+msgpack 虽然有众多实现，但是在常用语言实现的精致度和灵活性上并不是很好，尤其是对一些强类型语言的支持，比 hprose 要逊色的多。
+
+hprose 序列化在实现上提供了细粒度的序列化和反序列化接口，hprose 远程调用的实现之所以能够做到比其他 RPC 更动态灵活的类型映射，也是得益于这些细粒度的序列化和反序列化接口。而 msgpack 在实现上并不具备这种细粒度的接口。所以在这方面，hprose 具有 msgpack 完全不能取代的优势。
+
+=== 为什么不使用 ... 序列化方式? ===
+
+虽然我还可以列举出十几个我所知道的序列化方式，但是就我所知的这些序列化方式来说，还没有一个可以在总体上全面超越 hprose 序列化的，所以在 hprose 的 RPC 实现上暂时还是只支持 hprose 这一种序列化方式。世界上也许还有好几百种不同的数据序列化方式，但是我实在没有精力将它们一一研究。
+
+=== 使用 hprose 是否只能跟 hprose 服务器通讯，不能跟采用其它序列化方式的 RPC 服务器通讯吗？ ===
+
+严格的来说，客户端和服务器端进行通讯，并不是序列化方式相同就可以互通的，很多不同实现的 RPC，虽然采用的是某种相同的序列化方式，但是因为在通讯协议的制定上存在差别，那么这些不同实现的 RPC 彼此之间也是不能互通的。例如 dubbo 和 motan 都采用了 hessian 序列化方式，而且都支持多种序列化方式，但是 dubbo 和 motan 之间却不具有互通性，因为它们的 RPC 协议是不同的，所以，仅仅采用相同的序列化方式并不能让它们之间互通。
+
+而有一些标准的 RPC 协议，不但严格规定了序列化格式而且有严格的通讯协议格式规范，那么这种情况下，只要按照这种格式发送和接收数据，就可以跟这种 RPC 协议的任何标准的实现进行互通。
+
+hprose 提供的过滤器可以让你实现通讯协议的转换。所以，hprose 是可以支持跟一些其它的标准的 RPC 协议进行互通的。比如在有些语言的 hprose 实现上，已经内置了 JSONRPC 的过滤器，在这种情况下，只需要在服务器上设置好 JSONRPC 的过滤器，就可以直接把 Hprose 服务器变身成 hprose/JSONRPC 双料服务器。而在 hprose 客户端上设置好 JSONRPC 过滤器之后，hprose 客户端也可以变身成 JSONRPC 客户端，可以直接跟任何标准的 JSONRPC 服务器进行互通。
+
+所以即使 hprose 的核心序列化方式是不可替换的 hprose 序列化方式，但是这并不影响跟其它序列化方式的 RPC 服务器互通。
+
+== JavaScript 常见问题 ==
+
+=== hprose 支持 JavaScript 吗？===
+
+不但支持，而且有 3 个版本。
+
+=== 为什么 hprose 有 3 个 JavaScript 版本？ ===
+
+最初只有 [https://github.com/hprose/hprose-js hprose-js] 这一个版本，它支持各种新旧浏览器，甚至支持早已被许多前端框架摒弃的 IE6-IE8。
+
+它不但支持各种桌面浏览器，还支持各种移动浏览器，而且不仅仅支持 iOS、Android 这两个平台的浏览器，还支持比较冷门的 Windows Phone，Blackberry 系统浏览器，甚至早已过时的 WebOS，MeeGo，Symbian，Windows Mobile IE 都支持。
+
+后来 Hybird App 开始流行之后，[https://github.com/hprose/hprose-js hprose-js] 也增加了对各种 Hybird App 平台的支持，甚至连 tcp、websocket 通讯都支持。
+
+不过这都是后来的事情，最初 [https://github.com/hprose/hprose-js hprose-js] 只支持各种浏览器上的 http 通讯，并不支持 tcp、websocket 也不支持 Hybird App。
+
+当各种主流浏览器都开始支持 html5 时，hprose 推出了一个专门针对 html5 的 [https://github.com/hprose/hprose-html5 hprose-html5] 版本。这个版本主要是增加了对 ArrayBuffer 和 Typed Array 的支持，比如 Uint8Array，Int32Array, Float64Array 等。这样就可以高效的传递二进制数据了。
+
+后来 nodejs 出现之后，hprose 也推出了一个针对服务器端使用的 [https://github.com/hprose/hprose-nodejs hprose-nodejs] 版本。这个版本不但有跟 [https://github.com/hprose/hprose-js hprose-js], [https://github.com/hprose/hprose-html5 hprose-html5] 用法一致的客户端，还提供了服务器实现。nodejs 版本同样支持高效的二进制数据传输。
+
+这就是 3 个 JavaScript 版本的来历。
+
+=== hprose for JavaScript 支持跨域调用吗？===
+
+当然支持，必须支持。因为这个是 hprose 最初设计的目标之一。
+
+[https://github.com/hprose/hprose-js hprose-js] 对于不支持 XMLHttpRequest 2.0 的浏览器使用 Flash 跨域调用的方式。
+
+使用时，只需要将 [https://github.com/hprose/hprose-js/blob/master/dist/FlashHttpRequest.swf FlashHttpRequest.swf] 这个文件放在客户端可以访问的目录下，使用：
+
+<code>
+<script type="text/javascript" src="hprose.js" flashpath="/"></script>
+</code>
+
+指定 FlashHttpRequest.swf 的路径。然后服务器端根目录下（注意：一定是根目录！）放一个 [https://github.com/hprose/hprose-js/blob/master/dist/crossdomain.xml crossdomain.xml] 就可以跨域访问了。
+
+对于支持 XHR 2.0 的浏览器，跟 [https://github.com/hprose/hprose-html5 hprose-html5] 一样，是采用 CORS 方式来实现跨域的。客户端不需要任何特殊设置。服务器端只要开启相应的跨域选项就可以了。Hprose 的各种语言的 HTTP 服务器都提供了跨域选项的设置，具体使用的时候，可以直接参考文档。这里就不详细说明了。
+
+=== 在 React Native 中支持吗？===
+
+支持。可以使用 hprose-js 版本。在包含时请使用：
+
+<code>
+const hprose = require('hprose-js/dist/hprose.src.js');
+</code>
+
+方式来包含源码版本。压缩版本在 React Native 中不能被正确识别。

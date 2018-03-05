@@ -13,32 +13,31 @@ The hprose protocol has the following design goals:
 * It must support recursive types.
 * It must support unicode strings.
 * It must support 8-bit binary data without escaping or using attachments.
-* It must support encryption, compression, signature, and transaction context envelopes.
 
 =Serialization Format=
 
 Hprose serialization has 7 value types:
 
-# [[Hprose Specification#wiki-Integer|Integer]] (32-bit signed int)
-# [[Hprose Specification#wiki-Long|Long]] (unlimited long integer)
-# [[Hprose Specification#wiki-Double|Double]] (float, double or decimal)
-# [[Hprose Specification#wiki-Boolean|Boolean]]
-# [[Hprose Specification#wiki-UTF8_char|UTF8 char]] (16-bit unicode char, UTF8 format, 1-3 bytes)
-# [[Hprose Specification#wiki-Null|Null]]
-# [[Hprose Specification#wiki-Empty|Empty]] (empty string, empty binary data)
+# [[#Integer|Integer]] (32-bit signed int)
+# [[#Long|Long]] (unlimited long integer)
+# [[#Double|Double]] (float, double or decimal)
+# [[#Boolean|Boolean]]
+# [[#UTF8_char|UTF8 char]] (16-bit unicode char, UTF8 format, 1-3 bytes)
+# [[#Null|Null]]
+# [[#Empty|Empty]] (empty string, empty binary data)
 
 4 simple reference types:
 
-# [[Hprose Specification#wiki-DateTime|DateTime]]
-# [[Hprose Specification#wiki-Bytes|Bytes]]
-# [[Hprose Specification#wiki-String|String]]
-# [[Hprose Specification#wiki-GUID|GUID]]
+# [[#DateTime|DateTime]]
+# [[#Bytes|Bytes]]
+# [[#String|String]]
+# [[#GUID|GUID]]
 
 and 3 recursive reference types:
 
-# [[Hprose Specification#wiki-List|List]]
-# [[Hprose Specification#wiki-Map|Map]]
-# [[Hprose Specification#wiki-Object|Object]]
+# [[#List|List]]
+# [[#Map|Map]]
+# [[#Object|Object]]
 
 Each type is represented by one or more tags mixed data. Each tag is a octet. 
 
@@ -131,9 +130,9 @@ f                        # false
 
 ==UTF8 char==
 
-Most languages have a unicode char type, such as Java, C#. UTF8 char is used to store this type data. So it can't stores all the unicode codepoint. If an unicode codepoint need 2 char to store, it will be serialized to a [[Hprose Specification#wiki-String|String]].
+Most languages have a unicode char type, such as Java, C#. UTF8 char is used to store this type data. So it can't stores all the unicode codepoint. If an unicode codepoint need 2 char to store, it will be serialized to a [[#String|String]].
 
-The char c is represented like this:
+The char <code><c></code> is represented like this:
 <pre>
 u<c>
 </pre>
@@ -150,7 +149,7 @@ u∞                       # '∞' is stored as 3 octets 0xE2 0x88 0x9E
 
 ==Null==
 
-Null represents a null pointer. The octet <code>'n'</code> represents the null value.
+Null represents a null pointer or null object. The octet <code>'n'</code> represents the null value.
 
 <pre>
 n                        # null
@@ -166,7 +165,7 @@ e                        # empty
 
 ==DateTime==
 
-DateTime is a reference type in hprose, although in some programming languages ​​may be a value type. This will not bring any problems. We will discuss the difference between reference types and value types in [[Hprose Specification#wiki-Ref|Ref section]].
+DateTime is a reference type in hprose, although in some programming languages ​​may be a value type. This will not bring any problems. We will discuss the difference between reference types and value types in [[#Ref|Ref]] section.
 
 DateTime type can represent local and utc time. The local time end with the tag <code>;</code>, and the utc time end with the tag <code>Z</code>.
 
@@ -580,16 +579,25 @@ void errorExample() {
 <pre>
 Cs12"errorExample"z               # client call
 
-Es24"This is a error example."z    # server reply
+Es24"This is a error example."z   # server reply
 </pre>
 
-If a error occurs during a multicall, the multicall should be interrupted. for example:
+If a error occurs during a multicall, the multicall can be interrupted. for example:
 
 <pre>
 Cs5"hello"a1{s5"world"}Cs12"errorExample"Cs3"sum"a3{012}z            # client multicall
 
-Rs12"Hello world!"Es24"This is a error example."z                     # server reply
+Rs12"Hello world!"Es24"This is a error example."z                    # server reply
 </pre>
+
+or not be interrupted. for example:
+
+<pre>
+Cs5"hello"a1{s5"world"}Cs12"errorExample"Cs3"sum"a3{012}z            # client multicall
+
+Rs12"Hello world!"Es24"This is a error example."R3z                  # server reply
+</pre>
+
 
 = Transmission Protocol Binding =
 
@@ -626,12 +634,16 @@ Half Duplex Socket Binding is easy to implement, but the availability of the con
 
 <0x80,0x00,0x00,0x10><0x00,0x00,0x00,0x01>Cs3"sum"a3{012}z                    # client call
 
+<0x80,0x00,0x00,0x18><0x00,0x00,0x00,0x02>Cs5"hello"a1{s5"world"}z            # client call
+
+<0x80,0x00,0x00,0x13><0x00,0x00,0x00,0x02>Rs12"Hello world!"z                 # server reply
+
 <0x80,0x00,0x00,0x03><0x00,0x00,0x00,0x01>R3z                                 # server reply
 </pre>
 
 <0x80,0x00,0x00,0x18> means 4 bytes big endian encoding of integer 24.
 
-<0x00,0x00,0x00,0x00> and <0x00,0x00,0x00,0x01> are the request ids. The client use it to deal with the relationship of the request and response.
+<0x00,0x00,0x00,0x00>, <0x00,0x00,0x00,0x01> and <0x00,0x00,0x00,0x02> are the request ids. The client use it to deal with the relationship of the request and response.
 
 == WebSocket Binding ==
 
@@ -648,10 +660,14 @@ for example:
 
 <0x00,0x00,0x00,0x01>Cs3"sum"a3{012}z                    # client call
 
+<0x00,0x00,0x00,0x02>Cs5"hello"a1{s5"world"}z            # client call
+
+<0x00,0x00,0x00,0x02>Rs12"Hello world!"z                 # server reply
+
 <0x00,0x00,0x00,0x01>R3z                                 # server reply
 </pre>
 
-<0x00,0x00,0x00,0x00> and <0x00,0x00,0x00,0x01> are the request ids. The client use it to deal with the relationship of the request and response.
+<0x00,0x00,0x00,0x00>, <0x00,0x00,0x00,0x01> and  <0x00,0x00,0x00,0x02> are the request ids. The client use it to deal with the relationship of the request and response.
 
 No other special requirements.
 
@@ -786,7 +802,7 @@ function-arguments = list
 
 passing-by-ref = true
 
-rpc-call = 1*(%x43 function-name [[function-arguments] passing-by-ref]) end
+rpc-call = 1*(%x43 function-name [function-arguments [passing-by-ref]]) end
 
 rpc-result = %x52 serialize-data
 
@@ -804,7 +820,7 @@ rpc-reply = rpc-error end / 1*(rpc-result [rpc-arguments]) [rpc-error] end
 
 =Copyright and Licensing=
 
-© Copyright 2008-2015 Hprose.com. All Rights Reserved.
+© Copyright 2008-2016 Hprose.com. All Rights Reserved.
 
 Any party may implement this protocol for any purpose under the terms of the MIT License, provided that the implementation conforms to this specification. 
 
